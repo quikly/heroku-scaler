@@ -1,0 +1,14 @@
+GEM
+  remote: https://rubygems.org/
+  specs:
+    excon (0.33.0)
+    heroku-api (0.3.18)
+      excon (~> 0.27)
+      multi_json (~> 1.8)
+    multi_json (1.9.2)
+
+PLATFORMS
+  ruby
+
+DEPENDENCIES
+  heroku-api
