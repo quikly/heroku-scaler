@@ -25,6 +25,11 @@ heroku = Heroku::API.new(api_key: heroku_api_key)
 
 if options[:dyno_size]
   heroku.put_formation(options[:app], 'web' => options[:dyno_size])
+  if options[:dyno_size] == 'PX'
+    heroku.put_config_vars(options[:app], 'RUBY_GC_MALLOC_LIMIT' => '90000000')
+  else
+    heroku.heroku.delete_config_var(options[:app], 'RUBY_GC_MALLOC_LIMIT')
+  end
 end
 
 if options[:web_concurrency]
