@@ -40,12 +40,16 @@ new_config = {}
 
 if options[:dyno_size]
   heroku.put_formation(options[:app], options[:dyno_type] => options[:dyno_size])
-
   if options[:dyno_size] == '2X'
     new_config['RUBY_GC_HEAP_GROWTH_MAX_SLOTS'] = default_config['2X']['RUBY_GC_HEAP_GROWTH_MAX_SLOTS']
   else
     heroku.delete_config_var(options[:app], 'RUBY_GC_HEAP_GROWTH_MAX_SLOTS')
   end
+  # if options[:dyno_size] == 'PX'
+  #   new_config['RUBY_GC_MALLOC_LIMIT'] = default_config['PX']['RUBY_GC_MALLOC_LIMIT']
+  # else
+  #   heroku.delete_config_var(options[:app], 'RUBY_GC_MALLOC_LIMIT')
+  # end
 
   if !options[:web_concurrency]
     new_config['WEB_CONCURRENCY'] = default_config[options[:dyno_size]]['WEB_CONCURRENCY']
