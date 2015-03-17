@@ -5,23 +5,25 @@ require "optparse"
 
 Bundler.require(:default)
 
-heroku_api_key = ENV["HEROKU_API_KEY"] || raise("No Heroku API key env variable set")
+heroku_api_token = ENV["HEROKU_PLATFORM_API_TOKEN"] || raise("No Heroku API key env variable set")
 
 options = {}
 OptionParser.new do |opts|
   opts.banner = "Usage: #{ARGV[0]} [options]"
   opts.on("-a", "--app NAME", 'Your heroku app name') { |v| options[:app] = v }
-  opts.on("-t", "--type DYNO_TYPE", 'web or worker') { |v| options[:dyno_type] = v }
-  opts.on("-d", "--dynos NUM_DYNOS", 'Number of dynos you want to scale to') { |v| options[:count] = v }
-  opts.on("-s", "--size DYNO_SIZE", '1X, 2X or PX') { |v| options[:dyno_size] = v}
+  opts.on("-p", "--process WEB_OR_WORKER", 'web or worker') { |v| options[:process] = v }
+  opts.on("-q", "--quantity NUM_DYNOS", 'Number of dynos you want to scale to') { |v| options[:quantity] = v }
+  opts.on("-s", "--size DYNO_SIZE", '1X, 2X or PX') { |v| options[:size] = v}
   opts.on("-c", "--concurrency WEB_CONCURRENCY", 'Default is based on dyno size') { |v| options[:web_concurrency] = v}
 end.parse!
 
 raise OptionParser::MissingArgument, "--app" if options[:app].nil?
-raise OptionParser::MissingArgument, "--type" if options[:dyno_type].nil?
-raise OptionParser::MissingArgument, "--dynos" if options[:count].nil?
+raise OptionParser::MissingArgument, "--process" if options[:process].nil?
+raise OptionParser::MissingArgument, "--quantity" if options[:quantity].nil?
 
-heroku = Heroku::API.new(api_key: heroku_api_key)
+heroku = PlatformAPI.connect_oauth(heroku_api_token)
+
+#heroku = Heroku::API.new(api_key: heroku_api_key)
 
 default_config = {
   'PX' => {
@@ -36,32 +38,28 @@ default_config = {
   },
 }
 
-new_config = {}
+updates = {
+  "process" => options[:process],
+  "quantity" => options[:quantity]
+}
 
-if options[:dyno_size]
-  heroku.put_formation(options[:app], options[:dyno_type] => options[:dyno_size])
-  if options[:dyno_size] == '2X'
-    new_config['RUBY_GC_HEAP_GROWTH_MAX_SLOTS'] = default_config['2X']['RUBY_GC_HEAP_GROWTH_MAX_SLOTS']
+config_updates = {}
+
+if options[:size]
+  options[:size].upcase!
+  updates["size"] = options[:size]
+  if default_config[options[:size]]['RUBY_GC_HEAP_GROWTH_MAX_SLOTS']
+    config_updates['RUBY_GC_HEAP_GROWTH_MAX_SLOTS'] = default_config[options[:size]]['RUBY_GC_HEAP_GROWTH_MAX_SLOTS']
   else
-    heroku.delete_config_var(options[:app], 'RUBY_GC_HEAP_GROWTH_MAX_SLOTS')
+    config_updates['RUBY_GC_HEAP_GROWTH_MAX_SLOTS'] = nil
   end
-  # if options[:dyno_size] == 'PX'
-  #   new_config['RUBY_GC_MALLOC_LIMIT'] = default_config['PX']['RUBY_GC_MALLOC_LIMIT']
-  # else
-  #   heroku.delete_config_var(options[:app], 'RUBY_GC_MALLOC_LIMIT')
-  # end
-
   if !options[:web_concurrency]
-    new_config['WEB_CONCURRENCY'] = default_config[options[:dyno_size]]['WEB_CONCURRENCY']
+    config_updates['WEB_CONCURRENCY'] = default_config[options[:size]]['WEB_CONCURRENCY']
   end
 end
 
-if options[:web_concurrency]
-  new_config['WEB_CONCURRENCY'] = options[:web_concurrency]
-end
+config_updates['WEB_CONCURRENCY'] = options[:web_concurrency] if options[:web_concurrency]
 
-if new_config.size > 0
-  heroku.put_config_vars(options[:app], new_config)
-end
+heroku.config_var.update(options[:app], config_updates) if config_updates.size > 0
 
-heroku.post_ps_scale(options[:app], options[:dyno_type], options[:count])
+heroku.formation.batch_update(options[:app], {"updates" => [updates]})
