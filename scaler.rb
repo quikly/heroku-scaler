@@ -1,9 +1,7 @@
 #!/usr/bin/env ruby
 
-require "bundler"
 require "optparse"
-
-Bundler.require(:default)
+require "platform-api"
 
 heroku_api_token = ENV["HEROKU_PLATFORM_API_TOKEN"] || raise("No Heroku API key env variable set")
 

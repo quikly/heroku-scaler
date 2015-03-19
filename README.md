@@ -13,10 +13,10 @@ For example if you create a job with the task:
 
 ... and set the next run to 5:00 UTC. The number of web dynos for the app "my-app" will be scaled to 3 at 5:00 in the morning UTC.
 
-
-5:00 UTC / Midnight EST: ruby scaler.rb -a quikly-prod -p web -q 1 -s 1X
-7:00 UTC / 2AM EST:      ruby scaler.rb -a quikly-prod -p web -q 1 -s PX
-13:00 UTC / 8AM EST:     ruby scaler.rb -a quikly-prod -p web -q 2 -s PX
-
+```
+EST/EDT -> +4 -> UTC
+1AM ET --> 5  UTC:   ruby scaler.rb -a quikly-prod -p web -q 1 -s 1X
+8AM ET --> 12 UTC:   ruby scaler.rb -a quikly-prod -p web -q 2 -s PX
+```
 
 
