@@ -11,7 +11,7 @@ OptionParser.new do |opts|
   opts.on("-a", "--app NAME", 'Your heroku app name') { |v| options[:app] = v }
   opts.on("-p", "--process WEB_OR_WORKER", 'web or worker') { |v| options[:process] = v }
   opts.on("-q", "--quantity NUM_DYNOS", 'Number of dynos you want to scale to') { |v| options[:quantity] = v }
-  opts.on("-s", "--size DYNO_SIZE", '1X, 2X or PX') { |v| options[:size] = v}
+  opts.on("-s", "--size DYNO_SIZE", '1X, 2X or PX') { |v| options[:size] = v.upcase }
   opts.on("-c", "--concurrency WEB_CONCURRENCY", 'Default is based on dyno size') { |v| options[:web_concurrency] = v}
 end.parse!
 
@@ -19,45 +19,102 @@ raise OptionParser::MissingArgument, "--app" if options[:app].nil?
 raise OptionParser::MissingArgument, "--process" if options[:process].nil?
 raise OptionParser::MissingArgument, "--quantity" if options[:quantity].nil?
 
+# Simple class to only add a config change if it's not already set
+module Scaler
+  class Config
+    attr_accessor :updates
+    def initialize(current)
+      @current = current
+      @updates = {}
+    end
+
+    def update(key, value)
+      if @current[key] != value
+        @updates[key] = value
+      end
+    end
+  end
+end
+
 heroku = PlatformAPI.connect_oauth(heroku_api_token)
 
-#heroku = Heroku::API.new(api_key: heroku_api_key)
-
 default_config = {
-  'PX' => {
-    'WEB_CONCURRENCY' => '15',
+  '1X' => {
+    'WEB_CONCURRENCY' => '2',
   },
   '2X' => {
     'WEB_CONCURRENCY' => '4',
     'RUBY_GC_HEAP_GROWTH_MAX_SLOTS' => '400000'
   },
-  '1X' => {
-    'WEB_CONCURRENCY' => '2',
+  'PX' => {
+    'WEB_CONCURRENCY' => '15',
   },
 }
 
-updates = {
-  "process" => options[:process],
+formation_updates = {
+  "process"  => options[:process],
   "quantity" => options[:quantity]
 }
 
-config_updates = {}
+app               = options[:app]
+size              = options[:size]
+concurrency       = options[:web_concurrency]
+preboot_enabled   = heroku.app_feature.info(app, 'preboot')["enabled"]
+current_formation = heroku.formation.info(app, options[:process])
+current_config    = heroku.config_var.info(app)
+config            = Scaler::Config.new(current_config)
+commands          = [:config, :formation]
 
-if options[:size]
-  options[:size].upcase!
-  updates["size"] = options[:size]
-  if default_config[options[:size]]['RUBY_GC_HEAP_GROWTH_MAX_SLOTS']
-    config_updates['RUBY_GC_HEAP_GROWTH_MAX_SLOTS'] = default_config[options[:size]]['RUBY_GC_HEAP_GROWTH_MAX_SLOTS']
-  else
-    config_updates['RUBY_GC_HEAP_GROWTH_MAX_SLOTS'] = nil
-  end
-  if !options[:web_concurrency]
-    config_updates['WEB_CONCURRENCY'] = default_config[options[:size]]['WEB_CONCURRENCY']
+# Are we changing dyno sizes?
+if size && size != current_formation["size"]
+  formation_updates["size"] = size
+
+  # setting values to nil will unset the config value
+  config.update('RUBY_GC_HEAP_GROWTH_MAX_SLOTS', default_config[size]['RUBY_GC_HEAP_GROWTH_MAX_SLOTS'])
+
+  # only set with default config if not passed as an option
+  concurrency ||= default_config[size]['WEB_CONCURRENCY']
+
+  # The direction determines the order of the commands
+  # If we are scaling UP, update formation before updating config
+  if size == 'PX' || (size == '2X' && current_formation['size'] = '1X')
+    commands = [:formation, :config]
   end
 end
 
-config_updates['WEB_CONCURRENCY'] = options[:web_concurrency] if options[:web_concurrency]
+if concurrency
+  config.update('WEB_CONCURRENCY', concurrency)
+end
 
-heroku.config_var.update(options[:app], config_updates) if config_updates.size > 0
+# if preboot is enabled and we are scaling down to 1 dyno,
+# we must sleep 4 minutes between updating the config and scaling down
+if preboot_enabled && (options[:quantity].to_i == 1 && current_formation["quantity"].to_i != 1)
+  sleep_duration = 4 * 60
+else
+  sleep_duration = 0
+end
 
-heroku.formation.batch_update(options[:app], {"updates" => [updates]})
+previous_command_executed = false
+
+commands.each_with_index do |command, index|
+  # sleep before second command, only when necessary
+  if index == 1 && previous_command_executed
+    puts "Sleeping for #{sleep_duration} seconds between commands"
+    sleep(sleep_duration)
+  end
+
+  case command
+  when :config
+    if config.updates.size > 0
+      puts "Updating configuration: #{config.updates.inspect}"
+      heroku.config_var.update(app, config.updates)
+      previous_command_executed = true
+    end
+  when :formation
+    puts "Updating formation: #{formation_updates.inspect}"
+    heroku.formation.batch_update(app, {"updates" => [formation_updates]})
+    previous_command_executed = true
+  else
+    raise "Unknown command #{command}"
+  end
+end
