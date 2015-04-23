@@ -86,13 +86,15 @@ if concurrency
   config.update('WEB_CONCURRENCY', concurrency)
 end
 
-# if preboot is enabled and we are scaling down to 1 dyno,
-# we must sleep 4 minutes between updating the config and scaling down
-if preboot_enabled && (options[:quantity].to_i == 1 && current_formation["quantity"].to_i != 1)
+# if preboot is enabled and we're running more than one dyno,
+# we have to sleep 4 minutes between commands, otherwise we get H99 errors
+if preboot_enabled && (current_formation["quantity"].to_i != 1 && options[:quantity].to_i != 1)
   sleep_duration = 4 * 60
 else
   sleep_duration = 0
 end
+
+puts "preboot=#{preboot_enabled}, current quantity: #{current_formation["quantity"]}, scaling to #{options[:quantity].to_i}"
 
 previous_command_executed = false
 
