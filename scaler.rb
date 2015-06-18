@@ -67,6 +67,7 @@ commands          = [:config, :formation]
 
 # Are we changing dyno sizes?
 if size && size != current_formation["size"]
+  puts "Will change size from #{current_formation['size']} to #{size}."
   formation_updates["size"] = size
 
   # setting values to nil will unset the config value
@@ -77,9 +78,12 @@ if size && size != current_formation["size"]
 
   # The direction determines the order of the commands
   # If we are scaling UP, update formation before updating config
-  if size == 'PX' || (size == '2X' && current_formation['size'] = '1X')
+  if size == 'PX' || (size == '2X' && current_formation['size'] == '1X')
+    puts "Switching command order to formation, then config}"
     commands = [:formation, :config]
   end
+else
+  puts "No change in dyno size necessary."
 end
 
 if concurrency
@@ -94,9 +98,9 @@ else
   sleep_duration = 0
 end
 
-puts "preboot=#{preboot_enabled}, current quantity: #{current_formation["quantity"]}, scaling to #{options[:quantity].to_i}"
-
 previous_command_executed = false
+
+puts "Commands in order are #{commands.inspect}"
 
 commands.each_with_index do |command, index|
   # sleep before second command, only when necessary
@@ -111,6 +115,8 @@ commands.each_with_index do |command, index|
       puts "Updating configuration: #{config.updates.inspect}"
       heroku.config_var.update(app, config.updates)
       previous_command_executed = true
+    else
+      puts "No config updates are necessary, skipping."
     end
   when :formation
     puts "Updating formation: #{formation_updates.inspect}"
@@ -120,3 +126,5 @@ commands.each_with_index do |command, index|
     raise "Unknown command #{command}"
   end
 end
+
+puts "Done"
