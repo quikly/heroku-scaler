@@ -33,6 +33,12 @@ module Scaler
         @updates[key] = value
       end
     end
+
+    def update_all(values)
+      values.each do |key, value|
+        update(key, value)
+      end
+    end
   end
 end
 
@@ -43,8 +49,14 @@ default_config = {
     'WEB_CONCURRENCY' => '2',
   },
   '2X' => {
-    'WEB_CONCURRENCY' => '4',
-    'RUBY_GC_HEAP_GROWTH_MAX_SLOTS' => '400000'
+    'WEB_CONCURRENCY'                    => '4',
+    'RUBY_GC_HEAP_GROWTH_MAX_SLOTS'      => '400000',
+    'RUBY_GC_HEAP_GROWTH_FACTOR'         => '1.1',
+    'RUBY_GC_MALLOC_LIMIT'               => '16000000',
+    'RUBY_GC_MALLOC_LIMIT_GROWTH_FACTOR' => '1.1',
+    'RUBY_GC_MALLOC_LIMIT_MAX'           => '16000000',
+    'RUBY_GC_OLDMALLOC_LIMIT'            => '16000000',
+    'RUBY_GC_OLDMALLOC_LIMIT_MAX'        => '16000000',
   },
   'PX' => {
     'WEB_CONCURRENCY' => '15',
@@ -58,7 +70,6 @@ formation_updates = {
 
 app               = options[:app]
 size              = options[:size]
-concurrency       = options[:web_concurrency]
 preboot_enabled   = heroku.app_feature.info(app, 'preboot')["enabled"]
 current_formation = heroku.formation.info(app, options[:process])
 current_config    = heroku.config_var.info(app)
@@ -70,11 +81,13 @@ if size && size != current_formation["size"]
   puts "Will change size from #{current_formation['size']} to #{size}."
   formation_updates["size"] = size
 
-  # setting values to nil will unset the config value
-  config.update('RUBY_GC_HEAP_GROWTH_MAX_SLOTS', default_config[size]['RUBY_GC_HEAP_GROWTH_MAX_SLOTS'])
-
   # only set with default config if not passed as an option
-  concurrency ||= default_config[size]['WEB_CONCURRENCY']
+  if options[:web_concurrency]
+    default_config[size]['WEB_CONCURRENCY'] = options[:web_concurrency]
+  end
+
+  # setting values to nil will unset the config value
+  config.update_all(default_config[size])
 
   # The direction determines the order of the commands
   # If we are scaling UP, update formation before updating config
@@ -84,10 +97,6 @@ if size && size != current_formation["size"]
   end
 else
   puts "No change in dyno size necessary."
-end
-
-if concurrency
-  config.update('WEB_CONCURRENCY', concurrency)
 end
 
 # if preboot is enabled and we're running more than one dyno,
