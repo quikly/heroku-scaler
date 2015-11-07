@@ -60,6 +60,13 @@ default_config = {
   },
   'PX' => {
     'WEB_CONCURRENCY' => '15',
+    'RUBY_GC_HEAP_GROWTH_MAX_SLOTS'      => nil,
+    'RUBY_GC_HEAP_GROWTH_FACTOR'         => nil,
+    'RUBY_GC_MALLOC_LIMIT'               => nil,
+    'RUBY_GC_MALLOC_LIMIT_GROWTH_FACTOR' => nil,
+    'RUBY_GC_MALLOC_LIMIT_MAX'           => nil,
+    'RUBY_GC_OLDMALLOC_LIMIT'            => nil,
+    'RUBY_GC_OLDMALLOC_LIMIT_MAX'        => nil,
   },
 }
 
