@@ -21,7 +21,7 @@ EST/EDT -> +4 -> UTC
 
 Common scenarios:
 
-    ruby scaler.rb -a quikly-prod -p web -q 2 -c 4 -s Standard-2X
+    ruby scaler.rb -a quikly-prod -p web -q 2 -c 3 -s Standard-2X
     ruby scaler.rb -a quikly-prod -p web -q 2 -c 15 -s Performance-L
 
 
